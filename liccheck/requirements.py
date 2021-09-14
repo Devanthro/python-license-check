@@ -48,5 +48,6 @@ def resolve_without_deps(requirements):
 
 
 def resolve(requirements):
+    # import pdb; pdb.set_trace()
     for dist in pkg_resources.working_set.resolve(requirements):
         yield dist

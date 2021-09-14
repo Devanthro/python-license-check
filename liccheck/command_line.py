@@ -1,6 +1,7 @@
 import argparse
 import collections
 import os.path
+import subprocess
 
 from liccheck.requirements import parse_requirements, resolve, resolve_without_deps
 
@@ -109,7 +110,7 @@ class Reason(enum.Enum):
     UNKNOWN = 'UNKNOWN'
 
 
-def get_packages_info(requirement_file, no_deps=False):
+def get_packages_info(requirement_file, no_deps=False, search_ros_script=None):
     regex_license = re.compile(r'License: (?P<license>.*)?$', re.M)
     regex_classifier = re.compile(r'Classifier: License(?: :: OSI Approved)?(?: :: (?P<classifier>.*))?$', re.M)
 
@@ -126,6 +127,21 @@ def get_packages_info(requirement_file, no_deps=False):
             'dependencies': [dependency.project_name for dependency in dist.requires()],
             'licenses': licenses,
         }
+
+    def search_ros(pkg):
+        cmd = search_ros_script + f" {pkg}" 
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        result = p.stdout.readlines()
+        retval = p.wait()
+        if len(result) > 0:
+            return {
+            'name': pkg,
+            'version': '',
+            'location': '',
+            'dependencies': [],
+            "licenses": [r.decode("utf-8").strip() for r in result]
+            }
+        return None
 
     def get_license(dist):
         if dist.has_metadata(dist.PKG_INFO):
@@ -157,11 +173,17 @@ def get_packages_info(requirement_file, no_deps=False):
     resolve_func = resolve_without_deps if no_deps else resolve
     packages = []
     i = 0
-    for dist in resolve_func(requirements):
+    for r in requirements:
         try:
-            packages.append(transform(dist))
+            for dist in resolve_func([r]):
+                packages.append(transform(dist))
+                # print(dist)
         except Exception as e:
-            unknown.append(requirements[i].name)
+            if search_ros_script is not None:
+                ros_pkg = search_ros(requirements[i].name)
+                if ros_pkg is not None:
+                    packages.append(ros_pkg)
+
         i += 1
 
     # packages = [transform(dist) for dist in resolve_func(requirements)]
@@ -246,9 +268,10 @@ def group_by(items, key):
     return res
 
 
-def process(requirement_file, strategy, level=Level.STANDARD, reporting_file=None, no_deps=False, excel_file=None):
+def process(requirement_file, strategy, level=Level.STANDARD, reporting_file=None, no_deps=False, excel_file=None, search_ros_script=None):
     print('gathering licenses...')
-    pkg_info, unknown = get_packages_info(requirement_file, no_deps)
+    pkg_info, unknown = get_packages_info(requirement_file, no_deps, search_ros_script)
+    # import pdb; pdb.set_trace()
     all = list(pkg_info)
     deps_mention = '' if no_deps else ' and dependencies'
     print('{} package{}{}.'.format(len(pkg_info), '' if len(pkg_info) <= 1 else 's', deps_mention))
@@ -359,12 +382,19 @@ def parse_args(args):
         '--excel', dest="excel_file", default=None,
         help="write report to this excel file"
     )
+
+    parser.add_argument(
+        '--search-ros-script', dest="search_ros_script", default=None,
+        help="search for local ROS packages for UNKNOWN using the script under this path"
+    )
+
     return parser.parse_args(args)
 
 
 def run(args):
     strategy = read_strategy(args.strategy_ini_file)
-    return process(args.requirement_txt_file, strategy, args.level, args.reporting_txt_file, args.no_deps, args.excel_file)
+    print(args.search_ros_script)
+    return process(args.requirement_txt_file, strategy, args.level, args.reporting_txt_file, args.no_deps, args.excel_file, args.search_ros_script)
 
 
 def main():
