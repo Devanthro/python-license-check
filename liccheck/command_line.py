@@ -129,7 +129,7 @@ def get_packages_info(requirement_file, no_deps=False, search_ros_script=None):
         }
 
     def search_ros(pkg):
-        cmd = search_ros_script + f" {pkg}" 
+        cmd = search_ros_script + f" {pkg}"
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         result = p.stdout.readlines()
         retval = p.wait()
@@ -300,19 +300,18 @@ def process(requirement_file, strategy, level=Level.STANDARD, reporting_file=Non
 
     if excel_file is not None:
         import pandas as pd
-        # from styleframe import StyleFrame
+        from styleframe import StyleFrame
 
         excel_writer = pd.ExcelWriter(excel_file)
         # import pdb; pdb.set_trace()
         packages = sorted(packages, key=lambda i: (i['status'].value, i['name'].lower()))
 
         df = pd.DataFrame({'Dependency name': [p['name'] for p in packages] + unknown,\
-                            'Dependency license': [p['license'] for p in packages] + ["UNKNOWN"]*len(unknown)},\
-                            columns=['Dependency name', 'Dependency license'])
-        # sf = StyleFrame(df)
-        # sf.set_column_width(sf.columns[0], 40)
-        # sf.set_column_width(sf.columns[1], 40)
-        df.to_excel(excel_writer, sheet_name="ball_in_socket_estimator")
+                            'Dependency license': [p['license'] for p in packages] + ["UNKNOWN"]*len(unknown)})
+        sf = StyleFrame(df)
+        sf.set_column_width(sf.columns[0], 40)
+        sf.set_column_width(sf.columns[1], 40)
+        sf.to_excel(excel_writer, sheet_name="ball_in_socket_estimator")
         excel_writer.save()
 
 
