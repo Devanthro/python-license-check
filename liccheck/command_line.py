@@ -153,13 +153,23 @@ def get_packages_info(requirement_file, no_deps=False):
             return license[:-len(" license")]
         return license
 
+    unknown = []
     resolve_func = resolve_without_deps if no_deps else resolve
-    packages = [transform(dist) for dist in resolve_func(requirements)]
+    packages = []
+    i = 0
+    for dist in resolve_func(requirements):
+        try:
+            packages.append(transform(dist))
+        except Exception as e:
+            unknown.append(requirements[i].name)
+        i += 1
+
+    # packages = [transform(dist) for dist in resolve_func(requirements)]
     # keep only unique values as there are maybe some duplicates
     unique = []
     [unique.append(item) for item in packages if item not in unique]
 
-    return sorted(unique, key=(lambda item: item['name'].lower()))
+    return sorted(unique, key=(lambda item: item['name'].lower())), unknown
 
 
 def check_package(strategy, pkg, level=Level.STANDARD):
@@ -236,9 +246,9 @@ def group_by(items, key):
     return res
 
 
-def process(requirement_file, strategy, level=Level.STANDARD, reporting_file=None, no_deps=False):
+def process(requirement_file, strategy, level=Level.STANDARD, reporting_file=None, no_deps=False, excel_file=None):
     print('gathering licenses...')
-    pkg_info = get_packages_info(requirement_file, no_deps)
+    pkg_info, unknown = get_packages_info(requirement_file, no_deps)
     all = list(pkg_info)
     deps_mention = '' if no_deps else ' and dependencies'
     print('{} package{}{}.'.format(len(pkg_info), '' if len(pkg_info) <= 1 else 's', deps_mention))
@@ -249,6 +259,7 @@ def process(requirement_file, strategy, level=Level.STANDARD, reporting_file=Non
     if reporting_file:
         packages = []
         for r, ps in groups.items():
+            print(r)
             for p in ps:
                 packages.append(
                     {
@@ -259,8 +270,29 @@ def process(requirement_file, strategy, level=Level.STANDARD, reporting_file=Non
                     }
                 )
         with open(reporting_file, 'w') as f:
-            for p in sorted(packages, key=lambda i: i['name']):
-                f.write('{} {} {} {}\n'.format(p['name'], p['version'], p['license'], p['status'].value))
+            for p in sorted(packages, key=lambda i: i['status'].value):
+                f.write('{}\t{}\t{}\t{}\n'.format(p['name'], p['version'], p['license'], p['status'].value))
+            for p in sorted(unknown):
+                f.write('{}\t{}\n'.format(p, 'UNKNOWN'))
+
+    if excel_file is not None:
+        import pandas as pd
+        # from styleframe import StyleFrame
+
+        excel_writer = pd.ExcelWriter(excel_file)
+        # import pdb; pdb.set_trace()
+        packages = sorted(packages, key=lambda i: (i['status'].value, i['name'].lower()))
+
+        df = pd.DataFrame({'Dependency name': [p['name'] for p in packages] + unknown,\
+                            'Dependency license': [p['license'] for p in packages] + ["UNKNOWN"]*len(unknown)},\
+                            columns=['Dependency name', 'Dependency license'])
+        # sf = StyleFrame(df)
+        # sf.set_column_width(sf.columns[0], 40)
+        # sf.set_column_width(sf.columns[1], 40)
+        df.to_excel(excel_writer, sheet_name="ball_in_socket_estimator")
+        excel_writer.save()
+
+
 
     def format(l):
         return '{} package{}.'.format(len(l), '' if len(l) <= 1 else 's')
@@ -323,12 +355,16 @@ def parse_args(args):
         '--no-deps', dest='no_deps',
         help="don't check dependencies", action='store_true')
 
+    parser.add_argument(
+        '--excel', dest="excel_file", default=None,
+        help="write report to this excel file"
+    )
     return parser.parse_args(args)
 
 
 def run(args):
     strategy = read_strategy(args.strategy_ini_file)
-    return process(args.requirement_txt_file, strategy, args.level, args.reporting_txt_file, args.no_deps)
+    return process(args.requirement_txt_file, strategy, args.level, args.reporting_txt_file, args.no_deps, args.excel_file)
 
 
 def main():
