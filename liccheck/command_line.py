@@ -302,7 +302,10 @@ def process(requirement_file, strategy, level=Level.STANDARD, reporting_file=Non
         import pandas as pd
         from styleframe import StyleFrame
 
-        excel_writer = pd.ExcelWriter(excel_file)
+        try:
+            excel_writer = pd.ExcelWriter(excel_file, mode='a',if_sheet_exists='replace')
+        except:
+            excel_writer = pd.ExcelWriter(excel_file)
         # import pdb; pdb.set_trace()
         packages = sorted(packages, key=lambda i: (i['status'].value, i['name'].lower()))
 
@@ -311,7 +314,9 @@ def process(requirement_file, strategy, level=Level.STANDARD, reporting_file=Non
         sf = StyleFrame(df)
         sf.set_column_width(sf.columns[0], 40)
         sf.set_column_width(sf.columns[1], 40)
-        sf.to_excel(excel_writer, sheet_name="ball_in_socket_estimator")
+        folder_name = os.path.abspath(requirement_file).split("/")[-2]
+        if folder_name == '': folder_name="unknown"
+        sf.to_excel(excel_writer, sheet_name=folder_name)
         excel_writer.save()
 
 
@@ -392,7 +397,6 @@ def parse_args(args):
 
 def run(args):
     strategy = read_strategy(args.strategy_ini_file)
-    print(args.search_ros_script)
     return process(args.requirement_txt_file, strategy, args.level, args.reporting_txt_file, args.no_deps, args.excel_file, args.search_ros_script)
 
 
